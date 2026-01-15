@@ -938,15 +938,15 @@
 
     <script>
         const API_CONFIG = {
-            AUTH_URL: 'BACKEND_AUTH_ENDPOINT',
+            AUTH_URL: 'http://127.0.0.1:8000/api/login/',
             REGISTER_URL: 'http://127.0.0.1:8000/api/register/',
-            USER_STATS_URL: 'BACKEND_USER_STATS_ENDPOINT',
-            LEADERBOARD_URL: 'BACKEND_LEADERBOARD_ENDPOINT',
-            ACTIONS_URL: 'BACKEND_ACTIONS_ENDPOINT',
-            GLOBAL_FEED_URL: 'BACKEND_GLOBAL_FEED_ENDPOINT',
-            ADD_ACTION_URL: 'BACKEND_ADD_ACTION_ENDPOINT',
-            UPDATE_ACTION_URL: 'BACKEND_UPDATE_ACTION_ENDPOINT',
-            DELETE_ACTION_URL: 'BACKEND_DELETE_ACTION_ENDPOINT'
+            USER_STATS_URL: 'http://127.0.0.1:8000/api/user/stats/',
+            LEADERBOARD_URL: 'http://127.0.0.1:8000/api/leaderboard/',
+            ACTIONS_URL: 'http://127.0.0.1:8000/api/actions/',
+            GLOBAL_FEED_URL: 'http://127.0.0.1:8000/api/feed/',
+            ADD_ACTION_URL: 'http://127.0.0.1:8000/api/actions/add/',
+            UPDATE_ACTION_URL: 'http://127.0.0.1:8000/api/actions/update/1/',
+            DELETE_ACTION_URL: 'http://127.0.0.1:8000/api/actions/delete/1/'
         };
 
         let currentUser = null;
@@ -1417,4 +1417,5 @@
     </script>
 </body>
 </html>
+
 
