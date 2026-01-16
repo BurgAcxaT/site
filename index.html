@@ -937,28 +937,21 @@
     </div>
 
     <script>
-        const API_CONFIG = {
-            AUTH_URL: 'http://127.0.0.1:8000/api/login/',
-            REGISTER_URL: 'http://127.0.0.1:8000/api/register/',
-            USER_STATS_URL: 'http://127.0.0.1:8000/api/user/stats/',
-            LEADERBOARD_URL: 'http://127.0.0.1:8000/api/leaderboard/',
-            ACTIONS_URL: 'http://127.0.0.1:8000/api/actions/',
-            GLOBAL_FEED_URL: 'http://127.0.0.1:8000/api/feed/',
-            ADD_ACTION_URL: 'http://127.0.0.1:8000/api/actions/add/',
-            UPDATE_ACTION_URL: 'http://127.0.0.1:8000/api/actions/update/1/',
-            DELETE_ACTION_URL: 'http://127.0.0.1:8000/api/actions/delete/1/'
-        };
-
         let currentUser = null;
-        let currentToken = null;
         let habits = [];
         let myActions = [];
         let currentEditId = null;
+        let userStats = {
+            totalPoints: 0,
+            totalActions: 0,
+            todayActions: 0,
+            lastActionDate: null
+        };
 
         function setCookie(name, value, days) {
             const d = new Date();
             d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
-            document.cookie = name + "=" + value + ";expires=" + d.toUTCString() + ";path=/";
+            document.cookie = name + "=" + encodeURIComponent(value) + ";expires=" + d.toUTCString() + ";path=/";
         }
 
         function getCookie(name) {
@@ -967,13 +960,85 @@
             for(let i = 0; i < ca.length; i++) {
                 let c = ca[i];
                 while (c.charAt(0) == ' ') c = c.substring(1, c.length);
-                if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+                if (c.indexOf(nameEQ) == 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
             }
             return null;
         }
 
         function deleteCookie(name) {
             document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/";
+        }
+
+        function saveData() {
+            setCookie('ecoActions', JSON.stringify(myActions), 365);
+            setCookie('ecoStats', JSON.stringify(userStats), 365);
+        }
+
+        function loadData() {
+            const actionsData = getCookie('ecoActions');
+            const statsData = getCookie('ecoStats');
+            
+            if (actionsData) {
+                try {
+                    myActions = JSON.parse(actionsData);
+                } catch (e) {
+                    myActions = [];
+                }
+            }
+            
+            if (statsData) {
+                try {
+                    userStats = JSON.parse(statsData);
+                } catch (e) {
+                    userStats = {
+                        totalPoints: 0,
+                        totalActions: 0,
+                        todayActions: 0,
+                        lastActionDate: null
+                    };
+                }
+            }
+            
+            checkAndResetDailyActions();
+        }
+
+        function checkAndResetDailyActions() {
+            const today = new Date().toDateString();
+            const lastDate = userStats.lastActionDate;
+            
+            if (lastDate !== today) {
+                userStats.todayActions = 0;
+                userStats.lastActionDate = today;
+                
+                const todayActionsCount = myActions.filter(action => {
+                    return new Date(action.date).toDateString() === today;
+                }).length;
+                
+                userStats.todayActions = todayActionsCount;
+                
+                saveData();
+            }
+        }
+
+        function recalculateStats() {
+            const today = new Date().toDateString();
+            let totalPoints = 0;
+            let todayCount = 0;
+            
+            myActions.forEach(action => {
+                totalPoints += action.habit.points;
+                const actionDate = new Date(action.date).toDateString();
+                if (actionDate === today) {
+                    todayCount++;
+                }
+            });
+            
+            userStats.totalPoints = totalPoints;
+            userStats.totalActions = myActions.length;
+            userStats.todayActions = todayCount;
+            userStats.lastActionDate = today;
+            
+            saveData();
         }
 
         function createStars() {
@@ -1028,7 +1093,7 @@
             document.getElementById('loginForm').style.display = 'none';
         });
 
-        document.getElementById('loginBtn').addEventListener('click', async function() {
+        document.getElementById('loginBtn').addEventListener('click', function() {
             const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
             
@@ -1037,30 +1102,9 @@
                 return;
             }
 
-            try {
-                const response = await fetch(API_CONFIG.AUTH_URL, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username, password})
-                });
-                
-                if (!response.ok) throw new Error('Неверный логин или пароль');
-                
-                const data = await response.json();
-                currentUser = data.username;
-                currentToken = data.token;
-                
-                setCookie('ecotoken', currentToken, 30);
-                setCookie('ecouser', currentUser, 30);
-                
-                loginSuccess();
-            } catch (error) {
-    currentUser = username;
-    currentToken = 'demo_token_' + Math.random();
-    setCookie('ecotoken', currentToken, 30);
-    setCookie('ecouser', currentUser, 30);
-    loginSuccess();
-            }
+            currentUser = username;
+            setCookie('ecouser', currentUser, 365);
+            loginSuccess();
         });
 
         function loginSuccess() {
@@ -1068,6 +1112,8 @@
             document.getElementById('authSection').style.display = 'none';
             document.getElementById('mainContent').classList.add('active');
             document.getElementById('userName').textContent = currentUser;
+            
+            loadData();
             loadHabits();
             loadStats();
             loadGlobalFeed();
@@ -1075,7 +1121,7 @@
             loadLeaderboard();
         }
 
-        document.getElementById('registerBtn').addEventListener('click', async function() {
+        document.getElementById('registerBtn').addEventListener('click', function() {
             const username = document.getElementById('registerUsername').value;
             const email = document.getElementById('registerEmail').value;
             const password = document.getElementById('registerPassword').value;
@@ -1085,27 +1131,13 @@
                 return;
             }
 
-            try {
-                const response = await fetch(API_CONFIG.REGISTER_URL, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username, email, password})
-                });
-                
-                if (!response.ok) throw new Error('Ошибка регистрации');
-                
-                showNotification('Регистрация успешна! Войдите в систему.', 'success');
-                document.getElementById('loginTab').click();
-            } catch (error) {
-                showNotification('Произошла ошибка.', 'error');
-                document.getElementById('loginTab').click();
-            }
+            showNotification('Регистрация успешна! Войдите в систему.', 'success');
+            document.getElementById('loginTab').click();
+            document.getElementById('loginUsername').value = username;
         });
 
         document.getElementById('logoutBtn').addEventListener('click', function() {
             currentUser = null;
-            currentToken = null;
-            deleteCookie('ecotoken');
             deleteCookie('ecouser');
             document.getElementById('authSection').style.display = 'block';
             document.getElementById('mainContent').classList.remove('active');
@@ -1146,7 +1178,7 @@
             });
         }
 
-        async function addAction(habit) {
+        function addAction(habit) {
             showNotification('Привычка "' + habit.name + '" добавлена!', 'success');
             
             const newAction = {
@@ -1156,57 +1188,28 @@
                 user: currentUser
             };
             
-            try {
-                await fetch(API_CONFIG.ADD_ACTION_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + currentToken
-                    },
-                    body: JSON.stringify(newAction)
-                });
-            } catch (error) {
-                console.log('Using local storage');
-            }
-            
             myActions.unshift(newAction);
+            
+            userStats.totalPoints += habit.points;
+            userStats.totalActions++;
+            userStats.todayActions++;
+            userStats.lastActionDate = new Date().toDateString();
+            
+            saveData();
             loadStats();
             loadGlobalFeed();
             loadMyActions();
             loadLeaderboard();
         }
 
-        async function loadStats() {
-            try {
-                const response = await fetch(API_CONFIG.USER_STATS_URL, {
-                    headers: {'Authorization': 'Bearer ' + currentToken}
-                });
-                const data = await response.json();
-                
-                document.getElementById('totalPoints').textContent = data.totalPoints;
-                document.getElementById('todayActions').textContent = data.todayActions;
-                document.getElementById('totalActions').textContent = data.totalActions;
-                
-                updateProgress(data.todayActions);
-            } catch (error) {
-                let totalPoints = 0;
-                let todayCount = 0;
-                const today = new Date().toDateString();
-                
-                myActions.forEach(action => {
-                    totalPoints += action.habit.points;
-                    const actionDate = new Date(action.date).toDateString();
-                    if (actionDate === today) {
-                        todayCount++;
-                    }
-                });
-
-                document.getElementById('totalPoints').textContent = totalPoints;
-                document.getElementById('todayActions').textContent = todayCount;
-                document.getElementById('totalActions').textContent = myActions.length;
-                
-                updateProgress(todayCount);
-            }
+        function loadStats() {
+            checkAndResetDailyActions();
+            
+            document.getElementById('totalPoints').textContent = userStats.totalPoints;
+            document.getElementById('todayActions').textContent = userStats.todayActions;
+            document.getElementById('totalActions').textContent = userStats.totalActions;
+            
+            updateProgress(userStats.todayActions);
         }
 
         function updateProgress(todayCount) {
@@ -1215,64 +1218,38 @@
             document.getElementById('progressText').textContent = todayCount + '/5';
         }
 
-        async function loadGlobalFeed() {
+        function loadGlobalFeed() {
             const feed = document.getElementById('globalFeed');
-            
-            try {
-                const response = await fetch(API_CONFIG.GLOBAL_FEED_URL);
-                const data = await response.json();
-                
-                feed.innerHTML = '';
-                data.forEach(action => {
-                    const item = document.createElement('div');
-                    item.className = 'feed-item';
-                    const timeAgo = getTimeAgo(action.date);
-                    item.innerHTML = '<div class="feed-user">' + action.habit.icon + ' ' + action.user + '</div><div class="feed-action">выполнил(а): ' + action.habit.name + ' (+' + action.habit.points + ' очков)</div><div class="feed-time">' + timeAgo + '</div>';
-                    feed.appendChild(item);
-                });
-            } catch (error) {
-                feed.innerHTML = '';
-                const allActions = [];
-                myActions.forEach(action => allActions.push(action));
+            feed.innerHTML = '';
+            const allActions = [];
+            myActions.forEach(action => allActions.push(action));
 
-                const demoUsers = ['Алиса', 'Боб', 'Карина', 'Дмитрий', 'Елена'];
-                for (let i = 0; i < 10; i++) {
-                    const randomHabit = habits[Math.floor(Math.random() * habits.length)];
-                    const randomUser = demoUsers[Math.floor(Math.random() * demoUsers.length)];
-                    const randomDate = new Date(Date.now() - Math.random() * 86400000 * 3);
-                    allActions.push({
-                        id: 'demo_' + i,
-                        habit: randomHabit,
-                        date: randomDate.toISOString(),
-                        user: randomUser
-                    });
-                }
-
-                allActions.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-                allActions.slice(0, 15).forEach(action => {
-                    const item = document.createElement('div');
-                    item.className = 'feed-item';
-                    const timeAgo = getTimeAgo(action.date);
-                    item.innerHTML = '<div class="feed-user">' + action.habit.icon + ' ' + action.user + '</div><div class="feed-action">выполнил(а): ' + action.habit.name + ' (+' + action.habit.points + ' очков)</div><div class="feed-time">' + timeAgo + '</div>';
-                    feed.appendChild(item);
+            const demoUsers = ['Алиса', 'Боб', 'Карина', 'Дмитрий', 'Елена'];
+            for (let i = 0; i < 10; i++) {
+                const randomHabit = habits[Math.floor(Math.random() * habits.length)];
+                const randomUser = demoUsers[Math.floor(Math.random() * demoUsers.length)];
+                const randomDate = new Date(Date.now() - Math.random() * 86400000 * 3);
+                allActions.push({
+                    id: 'demo_' + i,
+                    habit: randomHabit,
+                    date: randomDate.toISOString(),
+                    user: randomUser
                 });
             }
+
+            allActions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            allActions.slice(0, 15).forEach(action => {
+                const item = document.createElement('div');
+                item.className = 'feed-item';
+                const timeAgo = getTimeAgo(action.date);
+                item.innerHTML = '<div class="feed-user">' + action.habit.icon + ' ' + action.user + '</div><div class="feed-action">выполнил(а): ' + action.habit.name + ' (+' + action.habit.points + ' очков)</div><div class="feed-time">' + timeAgo + '</div>';
+                feed.appendChild(item);
+            });
         }
 
-        async function loadMyActions() {
+        function loadMyActions() {
             const list = document.getElementById('myActionsList');
-            
-            try {
-                const response = await fetch(API_CONFIG.ACTIONS_URL, {
-                    headers: {'Authorization': 'Bearer ' + currentToken}
-                });
-                const data = await response.json();
-                myActions = data;
-            } catch (error) {
-                console.log('Using local actions');
-            }
-            
             list.innerHTML = '';
             
             if (myActions.length === 0) {
@@ -1289,37 +1266,28 @@
             });
         }
 
-        async function loadLeaderboard() {
+        function loadLeaderboard() {
             const list = document.getElementById('leaderboardList');
             
-            try {
-                const response = await fetch(API_CONFIG.LEADERBOARD_URL);
-                const data = await response.json();
-                
-                list.innerHTML = '';
-                data.forEach((user, index) => {
-                    const item = document.createElement('div');
-                    item.className = 'leaderboard-item';
-                    item.innerHTML = '<div class="leaderboard-rank">#' + (index + 1) + '</div><div class="leaderboard-user">' + user.username + '</div><div class="leaderboard-points">' + user.points + ' 🌿</div>';
-                    list.appendChild(item);
-                });
-            } catch (error) {
-                const demoLeaders = [
-                    {username: 'Джордж', points: 1250},
-                    {username: 'Мики Маус', points: 980},
-                    {username: 'Ладно', points: 875},
-                    {username: 'Сергей', points: 720},
-                    {username: 'Мини Маус', points: 650}
-                ];
-                
-                list.innerHTML = '';
-                demoLeaders.forEach((user, index) => {
-                    const item = document.createElement('div');
-                    item.className = 'leaderboard-item';
-                    item.innerHTML = '<div class="leaderboard-rank">#' + (index + 1) + '</div><div class="leaderboard-user">' + user.username + '</div><div class="leaderboard-points">' + user.points + ' 🌿</div>';
-                    list.appendChild(item);
-                });
-            }
+            const leaders = [
+                {username: currentUser, points: userStats.totalPoints},
+                {username: 'Джордж', points: 1250},
+                {username: 'Мики Маус', points: 980},
+                {username: 'Ладно', points: 875},
+                {username: 'Сергей', points: 720},
+                {username: 'Мини Маус', points: 650}
+            ];
+            
+            leaders.sort((a, b) => b.points - a.points);
+            const top5 = leaders.slice(0, 5);
+            
+            list.innerHTML = '';
+            top5.forEach((user, index) => {
+                const item = document.createElement('div');
+                item.className = 'leaderboard-item';
+                item.innerHTML = '<div class="leaderboard-rank">#' + (index + 1) + '</div><div class="leaderboard-user">' + user.username + '</div><div class="leaderboard-points">' + user.points + ' 🌿</div>';
+                list.appendChild(item);
+            });
         }
 
         function getTimeAgo(dateString) {
@@ -1343,17 +1311,22 @@
             }
         }
 
-        async function deleteAction(actionId) {
-            try {
-                await fetch(API_CONFIG.DELETE_ACTION_URL + '/' + actionId, {
-                    method: 'DELETE',
-                    headers: {'Authorization': 'Bearer ' + currentToken}
-                });
-            } catch (error) {
-                console.log('Using local delete');
+        function deleteAction(actionId) {
+            const action = myActions.find(a => a.id === actionId);
+            if (action) {
+                userStats.totalPoints -= action.habit.points;
+                userStats.totalActions--;
+                
+                const today = new Date().toDateString();
+                const actionDate = new Date(action.date).toDateString();
+                if (actionDate === today) {
+                    userStats.todayActions--;
+                }
             }
             
             myActions = myActions.filter(a => a.id !== actionId);
+            
+            saveData();
             showNotification('Действие удалено!', 'success');
             loadStats();
             loadGlobalFeed();
@@ -1361,26 +1334,18 @@
             loadLeaderboard();
         }
 
-        document.getElementById('saveEditBtn').addEventListener('click', async function() {
+        document.getElementById('saveEditBtn').addEventListener('click', function() {
             const newHabitId = parseInt(document.getElementById('editHabitSelect').value);
             const newHabit = habits.find(h => h.id === newHabitId);
             
             const action = myActions.find(a => a.id === currentEditId);
             if (action) {
+                const oldPoints = action.habit.points;
                 action.habit = newHabit;
                 
-                try {
-                    await fetch(API_CONFIG.UPDATE_ACTION_URL + '/' + currentEditId, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': 'Bearer ' + currentToken
-                        },
-                        body: JSON.stringify(action)
-                    });
-                } catch (error) {
-                    console.log('Using local update');
-                }
+                userStats.totalPoints = userStats.totalPoints - oldPoints + newHabit.points;
+                
+                saveData();
             }
             
             document.getElementById('editModal').classList.remove('active');
@@ -1388,6 +1353,7 @@
             loadStats();
             loadGlobalFeed();
             loadMyActions();
+            loadLeaderboard();
         });
 
         document.getElementById('cancelEditBtn').addEventListener('click', function() {
@@ -1402,25 +1368,28 @@
             const isDark = document.body.classList.contains('dark-theme');
             document.getElementById('themeIcon').textContent = isDark ? '☀️' : '🌙';
             document.getElementById('themeText').textContent = isDark ? 'Светлая' : 'Темная';
+            setCookie('ecoTheme', isDark ? 'dark' : 'light', 365);
         });
 
-        const savedToken = getCookie('ecotoken');
         const savedUser = getCookie('ecouser');
-        if (savedToken && savedUser) {
-            currentToken = savedToken;
+        if (savedUser) {
             currentUser = savedUser;
             loginSuccess();
         }
 
+        const savedTheme = getCookie('ecoTheme');
+        if (savedTheme === 'dark') {
+            document.body.classList.add('dark-theme');
+            document.getElementById('themeIcon').textContent = '☀️';
+            document.getElementById('themeText').textContent = 'Светлая';
+        }
+
         setInterval(function() {
             if (currentUser) {
-                loadGlobalFeed();
-                loadLeaderboard();
+                checkAndResetDailyActions();
+                loadStats();
             }
-        }, 10000);
+        }, 60000);
     </script>
 </body>
 </html>
-
-
-
