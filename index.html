@@ -1055,7 +1055,11 @@
                 
                 loginSuccess();
             } catch (error) {
-                showNotification('Ошибка подключения к серверу!', 'error');
+    currentUser = username;
+    currentToken = 'demo_token_' + Math.random();
+    setCookie('ecotoken', currentToken, 30);
+    setCookie('ecouser', currentUser, 30);
+    loginSuccess();
             }
         });
 
@@ -1301,11 +1305,11 @@
                 });
             } catch (error) {
                 const demoLeaders = [
-                    {username: 'EcoHero', points: 1250},
-                    {username: 'GreenWarrior', points: 980},
-                    {username: 'NatureLover', points: 875},
-                    {username: 'PlanetSaver', points: 720},
-                    {username: 'EcoChampion', points: 650}
+                    {username: 'Джордж', points: 1250},
+                    {username: 'Мики Маус', points: 980},
+                    {username: 'Ладно', points: 875},
+                    {username: 'Сергей', points: 720},
+                    {username: 'Мини Маус', points: 650}
                 ];
                 
                 list.innerHTML = '';
@@ -1417,5 +1421,6 @@
     </script>
 </body>
 </html>
+
 
 
